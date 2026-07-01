@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: is the requester listed as an admin?
+    function isAdmin() {
+      return request.auth != null &&
+             exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Students: can read/write only their own profile.
+    // Admins: can read every student profile (for the results viewer),
+    // but still cannot write other students' profiles.
+    match /users/{userId} {
+      allow read: if request.auth != null &&
+                     (request.auth.uid == userId || isAdmin());
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Questions: every signed-in user can read (needed to take the exam).
+    // Only admins can add/edit/delete questions.
+    match /questions/{subjectId}/items/{questionId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // Admins collection: a signed-in user may check ONLY their own admin doc
+    // (so the client can verify "am I an admin?"). They cannot list the
+    // collection or read anyone else's entry, and cannot write to it at all
+    // — you add/remove admins manually from the Firebase Console.
+    match /admins/{adminId} {
+      allow get: if request.auth != null && request.auth.uid == adminId;
+      allow list, write: if false;
+    }
+  }
+}
